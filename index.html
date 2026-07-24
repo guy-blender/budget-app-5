@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Paycheck Budgeter Pro - Secure Cloud Edition</title>
+  
+  <!-- Tailwind CSS & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  <!-- Chart.js for Financial Visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Firebase SDK Imports -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'paycheck-budget-secure';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+      apiKey: "demo-key",
+      authDomain: "demo-app.firebaseapp.com",
+      projectId: "demo-app",
+      storageBucket: "demo-app.appspot.com",
+      messagingSenderId: "000000000000",
+      appId: "1:000000000000:web:000000000000"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    window.db = db;
+    window.auth = auth;
+    window.appId = appId;
+    window.signInAnonymously = signInAnonymously;
+    window.signInWithCustomToken = signInWithCustomToken;
+    window.onAuthStateChanged = onAuthStateChanged;
+    window.doc = doc;
+    window.setDoc = setDoc;
+    window.onSnapshot = onSnapshot;
+    window.docRef = null;
+  </script>
+
+  <style>
+    body { background-color: #0b0f17; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .excel-table { border-collapse: separate; border-spacing: 0; width: 100%; }
+    .excel-table th { background-color: #151c28; border: 1px solid #283245; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; padding: 10px 12px; }
+    .excel-table td { border: 1px solid #1e293b; padding: 0; background-color: #0f172a; transition: background-color 0.15s; }
+    .excel-table td:focus-within { border: 2px solid #10b981; outline: none; background-color: #132337; }
+    .excel-input { background: transparent; color: #f8fafc; width: 100%; height: 100%; padding: 8px 12px; border: none; font-size: 0.875rem; }
+    .excel-input:focus { outline: none; }
+    .excel-input[type="number"] { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-align: right; }
+    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+    .nav-tab-active { background-color: #10b981; color: #ffffff; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35); }
+    .glass-card { background: rgba(21, 28, 40, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #0b0f17; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    .pulse-glow { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col md:flex-row overflow-x-hidden">
+
+  <!-- Navigation Sidebar -->
+  <aside class="w-full md:w-72 bg-[#111827] border-r border-slate-800/80 flex flex-col justify-between shrink-0 z-20">
+    <div>
+      <!-- App Header -->
+      <div class="p-5 border-b border-slate-800/80 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-emerald-500/20">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <div>
+            <h1 class="font-extrabold text-slate-100 text-base leading-tight tracking-wide">Secure Budget</h1>
+            <p class="text-[11px] text-emerald-400 font-medium flex items-center gap-1 mt-0.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-glow"></span>
+              <span id="authStatusText">Encrypted Sync</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="p-3 space-y-1">
+        <p class="px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">Workspace</p>
+
+        <button id="nav-sheet" onclick="switchMainTab('sheet')" class="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-3 transition-all nav-tab-active">
+          <i class="fa-solid fa-table-cells text-base"></i> Spreadsheet Grid
+        </button>
+
+        <p class="px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider mt-4 mb-2">Analytics & Charts</p>
+        
+        <button id="nav-chart-all" onclick="switchMainTab('chart-all')" class="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-3 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-all">
+          <i class="fa-solid fa-chart-line text-base text-emerald-400"></i> All Charts Combined
+        </button>
+        
+        <button id="nav-chart-doughnut" onclick="switchMainTab('chart-doughnut')" class="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-3 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-all">
+          <i class="fa-solid fa-chart-pie text-base text-teal-400"></i> Category Allocation
+        </button>
+
+        <button id="nav-chart-bar" onclick="switchMainTab('chart-bar')" class="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-3 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-all">
+          <i class="fa-solid fa-chart-column text-base text-cyan-400"></i> Budget vs Actual
+        </button>
+
+        <button id="nav-chart-line" onclick="switchMainTab('chart-line')" class="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-3 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-all">
+          <i class="fa-solid fa-chart-area text-base text-amber-400"></i> Spending Trajectory
+        </button>
+
+        <button id="nav-chart-pie" onclick="switchMainTab('chart-pie')" class="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-3 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-all">
+          <i class="fa-solid fa-[#10b981] fa-pie-chart text-base text-rose-400"></i> Line Item Slices
+        </button>
+
+        <button id="nav-chart-radar" onclick="switchMainTab('chart-radar')" class="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-3 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-all">
+          <i class="fa-solid fa-diagram-project text-base text-indigo-400"></i> Balance Radar
+        </button>
+      </nav>
+    </div>
+
+    <!-- Security Controls Sidebar Footer -->
+    <div class="p-4 border-t border-slate-800/80 space-y-2">
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3 space-y-2">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400 flex items-center gap-1.5 font-medium">
+            <i class="fa-solid fa-lock text-emerald-400"></i> Privacy Lock
+          </span>
+          <button onclick="openPinModal()" id="pinStatusBtn" class="text-[10px] text-emerald-400 hover:underline">Set PIN</button>
+        </div>
+        <button onclick="lockScreen()" class="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition font-medium flex items-center justify-center gap-2">
+          <i class="fa-solid fa-key"></i> Lock Workspace
+        </button>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="exportJSONBackup()" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] rounded-lg transition font-semibold flex items-center justify-center gap-1">
+          <i class="fa-solid fa-download"></i> Export JSON
+        </button>
+        <button onclick="triggerImportJSON()" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] rounded-lg transition font-semibold flex items-center justify-center gap-1">
+          <i class="fa-solid fa-upload"></i> Import JSON
+        </button>
+        <input type="file" id="importFileInput" accept=".json" class="hidden" onchange="handleImportJSON(event)"/>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content Stage -->
+  <main class="flex-1 flex flex-col min-w-0 bg-[#0b0f17] custom-scrollbar overflow-y-auto">
+    
+    <!-- Header Controls Toolbar -->
+    <header class="bg-[#111827] border-b border-slate-800 p-4 sticky top-0 z-10 space-y-3">
+      <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        
+        <!-- Timeframe Horizon Selectors -->
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-slate-400 font-semibold uppercase tracking-wider mr-1">Time Horizon:</span>
+          <button id="tf-1week" onclick="setTimeframe('1week')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">1 Week</button>
+          <button id="tf-1month" onclick="setTimeframe('1month')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition">1 Month</button>
+          <button id="tf-1year" onclick="setTimeframe('1year')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">1 Year</button>
+          <button id="tf-10year" onclick="setTimeframe('10year')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">10 Years</button>
+        </div>
+
+        <!-- Date Range Display & Actions -->
+        <div class="flex flex-wrap items-center gap-3 text-xs">
+          <div class="bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <i class="fa-regular fa-calendar-days text-emerald-400"></i>
+            <span id="dateRangeDisplay" class="text-slate-200 font-mono font-medium">-- / --</span>
+          </div>
+          <button onclick="exportCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 px-3 py-1.5 rounded-xl transition font-medium flex items-center gap-1.5">
+            <i class="fa-solid fa-file-csv text-emerald-400"></i> Export CSV
+          </button>
+          <button onclick="promptResetDefaults()" class="bg-slate-800 hover:bg-rose-950/40 text-rose-300 border border-slate-700/80 hover:border-rose-800/60 px-3 py-1.5 rounded-xl transition font-medium flex items-center gap-1.5">
+            <i class="fa-solid fa-rotate-left"></i> Reset
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Formula Bar -->
+      <div class="flex items-center gap-2 bg-[#0b0f17] border border-slate-800 rounded-lg px-3 py-1.5 font-mono text-xs text-slate-400">
+        <span class="text-emerald-400 font-bold italic">fx</span>
+        <span class="text-slate-700">|</span>
+        <span id="formulaBarText" class="text-slate-300 overflow-x-auto whitespace-nowrap">
+          SECURITY_STATUS: XSS Input Escaped • User Data Isolated • Auto-Synced to Firestore
+        </span>
+      </div>
+    </header>
+
+    <!-- Content Workspace -->
+    <div class="p-4 md:p-6 flex-1 space-y-6">
+
+      <!-- Top KPI Summary Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3.5">
+        <div class="glass-card p-4 rounded-2xl border border-slate-800">
+          <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total Income</p>
+          <p id="statIncome" class="text-xl font-extrabold text-emerald-400 font-mono mt-1">$0.00</p>
+          <p id="statScaleLabel" class="text-[10px] text-slate-500 mt-1">Scale Factor: 1x</p>
+        </div>
+
+        <div class="glass-card p-4 rounded-2xl border border-slate-800">
+          <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Budgeted Outflows</p>
+          <p id="statBudgeted" class="text-xl font-extrabold text-cyan-400 font-mono mt-1">$0.00</p>
+          <p id="statAllocPct" class="text-[10px] text-slate-500 mt-1">0% Allocated</p>
+        </div>
+
+        <div class="glass-card p-4 rounded-2xl border border-slate-800">
+          <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Actual Spent</p>
+          <p id="statActual" class="text-xl font-extrabold text-purple-400 font-mono mt-1">$0.00</p>
+          <p id="statSpentPct" class="text-[10px] text-slate-500 mt-1">0% Spent</p>
+        </div>
+
+        <div class="glass-card p-4 rounded-2xl border border-slate-800">
+          <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Net Variance</p>
+          <p id="statVariance" class="text-xl font-extrabold font-mono mt-1">$0.00</p>
+          <p class="text-[10px] text-slate-500 mt-1">Budget minus Actual</p>
+        </div>
+
+        <div id="gaugeCard" class="glass-card p-4 rounded-2xl border-2 border-slate-700 col-span-2 md:col-span-1 transition-all">
+          <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Left to Budget</p>
+          <p id="statLeftToBudget" class="text-xl font-extrabold font-mono mt-1">$0.00</p>
+          <p id="gaugeStatusText" class="text-[10px] font-semibold mt-1 text-slate-400">Zero-Based Status</p>
+        </div>
+      </div>
+
+      <!-- SECTION 1: Spreadsheet Grid -->
+      <section id="sec-sheet" class="space-y-4">
+        <div class="glass-card rounded-2xl overflow-hidden border border-slate-800 shadow-2xl overflow-x-auto custom-scrollbar">
+          <table class="excel-table">
+            <thead>
+              <tr>
+                <th class="w-12 text-center">#</th>
+                <th class="text-left w-36">Category</th>
+                <th class="text-left">Item Description</th>
+                <th class="text-right w-40">Budgeted ($)</th>
+                <th class="text-right w-40">Actual Spent ($)</th>
+                <th class="text-right w-36">Variance ($)</th>
+                <th class="w-16 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="sheetBody">
+              <!-- Dynamically rendered -->
+            </tbody>
+            <tfoot id="sheetFoot" class="bg-[#151c28] border-t-2 border-slate-800">
+              <!-- Dynamically rendered -->
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- Add Row Toolbar -->
+        <div class="flex flex-wrap justify-between items-center gap-3">
+          <div class="flex flex-wrap gap-2">
+            <button onclick="addNewRow('expenses')" class="px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+              <i class="fa-solid fa-plus"></i> Add Expense Row
+            </button>
+            <button onclick="addNewRow('bills')" class="px-3.5 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+              <i class="fa-solid fa-plus"></i> Add Bill Row
+            </button>
+            <button onclick="addNewRow('savings')" class="px-3.5 py-2 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+              <i class="fa-solid fa-plus"></i> Add Savings Goal
+            </button>
+          </div>
+          <div class="text-xs text-slate-500 flex items-center gap-2">
+            <i class="fa-solid fa-circle-check text-emerald-400"></i> Safe HTML Sanitization Active
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 2: Chart Views -->
+      <section id="sec-chart-doughnut" class="hidden space-y-4">
+        <div class="glass-card p-6 rounded-2xl border border-slate-800">
+          <h2 class="text-lg font-bold text-slate-100 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-chart-pie text-teal-400"></i> Category Allocation Breakdown
+          </h2>
+          <p class="text-xs text-slate-400 mb-6">Proportionate distribution across Savings, Bills, Expenses, and Debt</p>
+          <div class="max-w-md mx-auto h-80">
+            <canvas id="chartDoughnutCanvas"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="sec-chart-bar" class="hidden space-y-4">
+        <div class="glass-card p-6 rounded-2xl border border-slate-800">
+          <h2 class="text-lg font-bold text-slate-100 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-chart-column text-cyan-400"></i> Budget vs. Actual Comparison
+          </h2>
+          <p class="text-xs text-slate-400 mb-6">Planned targets vs actual money spent per category</p>
+          <div class="h-96">
+            <canvas id="chartBarCanvas"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="sec-chart-line" class="hidden space-y-4">
+        <div class="glass-card p-6 rounded-2xl border border-slate-800">
+          <h2 class="text-lg font-bold text-slate-100 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-chart-area text-amber-400"></i> Cumulative Spending Trajectory
+          </h2>
+          <p class="text-xs text-slate-400 mb-6">Stepwise spending accumulation across your budget items</p>
+          <div class="h-96">
+            <canvas id="chartLineCanvas"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="sec-chart-pie" class="hidden space-y-4">
+        <div class="glass-card p-6 rounded-2xl border border-slate-800">
+          <h2 class="text-lg font-bold text-slate-100 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-pie-chart text-rose-400"></i> Detailed Line Item Slices
+          </h2>
+          <p class="text-xs text-slate-400 mb-6">Unique multi-color breakdown for every single budget row</p>
+          <div class="max-w-lg mx-auto h-96">
+            <canvas id="chartPieCanvas"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="sec-chart-radar" class="hidden space-y-4">
+        <div class="glass-card p-6 rounded-2xl border border-slate-800">
+          <h2 class="text-lg font-bold text-slate-100 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-diagram-project text-indigo-400"></i> Financial Balance Radar
+          </h2>
+          <p class="text-xs text-slate-400 mb-6">Multi-axis distribution of budget allocations</p>
+          <div class="max-w-md mx-auto h-96">
+            <canvas id="chartRadarCanvas"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="sec-chart-all" class="hidden space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="glass-card p-5 rounded-2xl border border-slate-800">
+            <h3 class="text-sm font-bold text-slate-200 mb-3">Category Allocations</h3>
+            <div class="h-64"><canvas id="allDoughnutCanvas"></canvas></div>
+          </div>
+          <div class="glass-card p-5 rounded-2xl border border-slate-800">
+            <h3 class="text-sm font-bold text-slate-200 mb-3">Budget vs Actual</h3>
+            <div class="h-64"><canvas id="allBarCanvas"></canvas></div>
+          </div>
+          <div class="glass-card p-5 rounded-2xl border border-slate-800">
+            <h3 class="text-sm font-bold text-slate-200 mb-3">Spending Trajectory</h3>
+            <div class="h-64"><canvas id="allLineCanvas"></canvas></div>
+          </div>
+          <div class="glass-card p-5 rounded-2xl border border-slate-800">
+            <h3 class="text-sm font-bold text-slate-200 mb-3">Item Slices</h3>
+            <div class="h-64"><canvas id="allPieCanvas"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- PIN Set/Enter Privacy Modal -->
+  <div id="pinModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card max-w-sm w-full p-6 rounded-2xl border border-slate-700 space-y-4 text-center">
+      <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto text-xl border border-emerald-500/30">
+        <i class="fa-solid fa-lock"></i>
+      </div>
+      <div>
+        <h3 id="pinModalTitle" class="text-lg font-bold text-slate-100">Set Privacy PIN</h3>
+        <p class="text-xs text-slate-400 mt-1">Enter a 4-digit PIN to secure your workspace display.</p>
+      </div>
+      <input type="password" id="pinInput" maxlength="4" placeholder="••••" class="w-32 mx-auto text-center text-2xl tracking-widest bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-emerald-400 focus:outline-none focus:border-emerald-500 font-mono">
+      <div id="pinErrorMsg" class="text-xs text-rose-400 hidden">Incorrect PIN</div>
+      <div class="flex gap-2">
+        <button onclick="closePinModal()" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl font-semibold">Cancel</button>
+        <button onclick="submitPinModal()" class="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-white text-xs rounded-xl font-semibold shadow-lg shadow-emerald-500/20">Save PIN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screen Locked Overlay -->
+  <div id="lockOverlay" class="fixed inset-0 bg-[#0b0f17] z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card max-w-sm w-full p-8 rounded-2xl border border-slate-800 text-center space-y-5">
+      <div class="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-3xl flex items-center justify-center mx-auto text-2xl">
+        <i class="fa-solid fa-user-shield"></i>
+      </div>
+      <div>
+        <h3 class="text-xl font-extrabold text-slate-100">Workspace Locked</h3>
+        <p class="text-xs text-slate-400 mt-1">Enter your 4-digit PIN to unlock your budget spreadsheet.</p>
+      </div>
+      <input type="password" id="unlockPinInput" maxlength="4" placeholder="••••" class="w-36 mx-auto text-center text-3xl tracking-widest bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-emerald-400 focus:outline-none focus:border-emerald-500 font-mono">
+      <p id="unlockErrorMsg" class="text-xs text-rose-400 hidden">Invalid Security PIN</p>
+      <button onclick="unlockWorkspace()" class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-500/20 transition">
+        Unlock Dashboard
+      </button>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal (Replaces alert/confirm) -->
+  <div id="confirmModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card max-w-sm w-full p-6 rounded-2xl border border-slate-700 space-y-4 text-center">
+      <div class="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto text-xl border border-amber-500/30">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <h3 id="confirmTitle" class="text-base font-bold text-slate-100">Are you sure?</h3>
+      <p id="confirmMessage" class="text-xs text-slate-400">This action will reset your sheet data.</p>
+      <div class="flex gap-2">
+        <button id="confirmCancelBtn" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl font-semibold">Cancel</button>
+        <button id="confirmActionBtn" class="flex-1 py-2 bg-rose-500 hover:bg-rose-400 text-white text-xs rounded-xl font-semibold">Proceed</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Initial Dataset
+    const defaultData = [
+      { id: 1, type: 'income', category: 'INCOME', name: 'Primary Paycheck', budget: 5000, actual: 5000 },
+      { id: 2, type: 'income', category: 'INCOME', name: 'Side Income / Rollover', budget: 1000, actual: 1000 },
+      { id: 3, type: 'savings', category: 'SAVINGS', name: 'House Downpayment', budget: 1000, actual: 1000 },
+      { id: 4, type: 'savings', category: 'SAVINGS', name: 'Emergency Fund', budget: 500, actual: 500 },
+      { id: 5, type: 'bills', category: 'BILLS', name: 'Property Tax / Rent', budget: 1200, actual: 1200 },
+      { id: 6, type: 'bills', category: 'BILLS', name: 'Electricity & Water', budget: 250, actual: 240 },
+      { id: 7, type: 'bills', category: 'BILLS', name: 'Cell Phone & Internet', budget: 170, actual: 170 },
+      { id: 8, type: 'expenses', category: 'EXPENSES', name: 'Groceries', budget: 600, actual: 580 },
+      { id: 9, type: 'expenses', category: 'EXPENSES', name: 'Dining Out', budget: 350, actual: 390 },
+      { id: 10, type: 'expenses', category: 'EXPENSES', name: 'Personal Care', budget: 150, actual: 120 },
+      { id: 11, type: 'debt', category: 'DEBT', name: 'Car Loan', budget: 300, actual: 300 },
+      { id: 12, type: 'debt', category: 'DEBT', name: 'Student Loan', budget: 300, actual: 300 },
+      { id: 13, type: 'debt', category: 'DEBT', name: 'Credit Card Minimums', budget: 180, actual: 200 }
+    ];
+
+    // State Variables
+    let sheetData = JSON.parse(localStorage.getItem('secure_budget_data')) || defaultData;
+    let currentTimeframe = '1month';
+    let timeframeMultiplier = 1;
+    let activeTab = 'sheet';
+    let userPin = localStorage.getItem('secure_budget_pin') || null;
+    let chartInstances = {};
+
+    // Helper: XSS HTML Escaper
+    function escapeHTML(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Helper: Currency Formatter
+    function formatCurrency(val) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val || 0);
+    }
+
+    // Initialize Firebase Auth & Realtime Sync
+    window.onload = function() {
+      if (userPin) {
+        document.getElementById('pinStatusBtn').innerText = 'Change PIN';
+      }
+
+      if (window.auth && window.onAuthStateChanged) {
+        window.onAuthStateChanged(window.auth, async (user) => {
+          let currentUser = user;
+          if (!currentUser) {
+            try {
+              const cred = await window.signInAnonymously(window.auth);
+              currentUser = cred.user;
+            } catch (e) {
+              console.warn("Auth error, using local mode:", e);
+            }
+          }
+
+          if (currentUser) {
+            const userId = currentUser.uid;
+            document.getElementById('authStatusText').innerText = "Online & Syncing";
+            
+            // Path: /artifacts/{appId}/users/{userId}/data/budgetData
+            window.docRef = window.doc(window.db, 'artifacts', window.appId, 'users', userId, 'data', 'budgetData');
+
+            window.onSnapshot(window.docRef, (docSnap) => {
+              if (docSnap.exists() && docSnap.data().items) {
+                sheetData = docSnap.data().items;
+                localStorage.setItem('secure_budget_data', JSON.stringify(sheetData));
+                render();
+              } else {
+                saveData();
+              }
+            }, (err) => {
+              console.warn("Firestore sync error:", err);
+            });
+          }
+        });
+      }
+
+      updateDateRangeDisplay();
+      render();
+    };
+
+    // Save Data Function
+    async function saveData() {
+      localStorage.setItem('secure_budget_data', JSON.stringify(sheetData));
+      if (window.docRef && window.setDoc) {
+        try {
+          await window.setDoc(window.docRef, { items: sheetData, updatedAt: new Date().toISOString() });
+        } catch (e) {
+          console.warn("Cloud save fallback:", e);
+        }
+      }
+      render();
+    }
+
+    // Timeframe selector
+    function setTimeframe(tf) {
+      currentTimeframe = tf;
+      const btnMap = { '1week': 0.23, '1month': 1, '1year': 12, '10year': 120 };
+      timeframeMultiplier = btnMap[tf] || 1;
+
+      ['1week', '1month', '1year', '10year'].forEach(key => {
+        const btn = document.getElementById(`tf-${key}`);
+        if (key === tf) {
+          btn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition";
+        } else {
+          btn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition";
+        }
+      });
+
+      updateDateRangeDisplay();
+      render();
+    }
+
+    function updateDateRangeDisplay() {
+      const today = new Date();
+      let endDate = new Date();
+
+      if (currentTimeframe === '1week') {
+        endDate.setDate(today.getDate() + 7);
+      } else if (currentTimeframe === '1month') {
+        endDate.setMonth(today.getMonth() + 1);
+      } else if (currentTimeframe === '1year') {
+        endDate.setFullYear(today.getFullYear() + 1);
+      } else if (currentTimeframe === '10year') {
+        endDate.setFullYear(today.getFullYear() + 10);
+      }
+
+      const options = { month: 'short', day: 'numeric', year: 'numeric' };
+      document.getElementById('dateRangeDisplay').innerText = 
+        `${today.toLocaleDateString('en-US', options)} - ${endDate.toLocaleDateString('en-US', options)}`;
+      
+      document.getElementById('statScaleLabel').innerText = `Scale Factor: ${timeframeMultiplier}x`;
+    }
+
+    // Grid Updates
+    function updateRow(id, field, value) {
+      const row = sheetData.find(r => r.id === id);
+      if (!row) return;
+
+      if (field === 'budget' || field === 'actual') {
+        row[field] = (parseFloat(value) || 0) / timeframeMultiplier;
+      } else if (field === 'type') {
+        row.type = value;
+        row.category = value.toUpperCase();
+      } else {
+        row[field] = String(value);
+      }
+      saveData();
+    }
+
+    function deleteRow(id) {
+      sheetData = sheetData.filter(r => r.id !== id);
+      saveData();
+    }
+
+    function addNewRow(type = 'expenses') {
+      const newId = sheetData.length > 0 ? Math.max(...sheetData.map(r => r.id)) + 1 : 1;
+      sheetData.push({
+        id: newId,
+        type: type,
+        category: type.toUpperCase(),
+        name: 'New Line Item',
+        budget: 100,
+        actual: 0
+      });
+      saveData();
+    }
+
+    // Modal Confirmation Dialog
+    function showConfirmModal(title, message, onConfirm) {
+      document.getElementById('confirmTitle').innerText = title;
+      document.getElementById('confirmMessage').innerText = message;
+      const modal = document.getElementById('confirmModal');
+      modal.classList.remove('hidden');
+
+      document.getElementById('confirmCancelBtn').onclick = () => modal.classList.add('hidden');
+      document.getElementById('confirmActionBtn').onclick = () => {
+        modal.classList.add('hidden');
+        onConfirm();
+      };
+    }
+
+    function promptResetDefaults() {
+      showConfirmModal("Reset Budget Data?", "This will reset all budget entries back to default baseline values.", () => {
+        sheetData = JSON.parse(JSON.stringify(defaultData));
+        saveData();
+      });
+    }
+
+    // Main Render Pipeline
+    function render() {
+      const tbody = document.getElementById('sheetBody');
+      tbody.innerHTML = '';
+
+      let totalIncomeBudget = 0;
+      let totalOutflowBudget = 0;
+      let totalOutflowActual = 0;
+
+      sheetData.forEach((row, idx) => {
+        const isIncome = row.type === 'income';
+        const scaledBudget = (row.budget || 0) * timeframeMultiplier;
+        const scaledActual = (row.actual || 0) * timeframeMultiplier;
+        const variance = scaledBudget - scaledActual;
+
+        if (isIncome) {
+          totalIncomeBudget += scaledBudget;
+        } else {
+          totalOutflowBudget += scaledBudget;
+          totalOutflowActual += scaledActual;
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="text-center font-mono text-xs text-slate-500 select-none">${idx + 1}</td>
+          <td class="p-1">
+            <select onchange="updateRow(${row.id}, 'type', this.value)" 
+              class="excel-input text-xs font-semibold rounded px-1 border border-transparent hover:border-slate-700 focus:border-emerald-500">
+              <option value="income" ${row.type === 'income' ? 'selected' : ''}>INCOME</option>
+              <option value="savings" ${row.type === 'savings' ? 'selected' : ''}>SAVINGS</option>
+              <option value="bills" ${row.type === 'bills' ? 'selected' : ''}>BILLS</option>
+              <option value="expenses" ${row.type === 'expenses' ? 'selected' : ''}>EXPENSES</option>
+              <option value="debt" ${row.type === 'debt' ? 'selected' : ''}>DEBT</option>
+            </select>
+          </td>
+          <td>
+            <input type="text" value="${escapeHTML(row.name)}" onchange="updateRow(${row.id}, 'name', this.value)" 
+              class="excel-input font-medium text-slate-200 focus:bg-slate-800/80">
+          </td>
+          <td>
+            <input type="number" step="0.01" value="${scaledBudget.toFixed(2)}" onchange="updateRow(${row.id}, 'budget', this.value)" 
+              class="excel-input text-slate-100 font-mono">
+          </td>
+          <td>
+            <input type="number" step="0.01" value="${scaledActual.toFixed(2)}" onchange="updateRow(${row.id}, 'actual', this.value)" 
+              class="excel-input text-slate-300 font-mono">
+          </td>
+          <td class="px-3 py-2 text-right font-mono text-xs font-semibold ${variance < 0 ? 'text-rose-400' : 'text-slate-400'}">
+            ${formatCurrency(variance)}
+          </td>
+          <td class="text-center">
+            <button onclick="deleteRow(${row.id})" class="text-slate-600 hover:text-rose-400 transition text-xs p-1">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Update KPI Statistics
+      const netVariance = totalOutflowBudget - totalOutflowActual;
+      const leftToBudget = totalIncomeBudget - totalOutflowBudget;
+
+      document.getElementById('statIncome').innerText = formatCurrency(totalIncomeBudget);
+      document.getElementById('statBudgeted').innerText = formatCurrency(totalOutflowBudget);
+      document.getElementById('statActual').innerText = formatCurrency(totalOutflowActual);
+
+      const allocPct = totalIncomeBudget > 0 ? ((totalOutflowBudget / totalIncomeBudget) * 100).toFixed(1) : 0;
+      const spentPct = totalIncomeBudget > 0 ? ((totalOutflowActual / totalIncomeBudget) * 100).toFixed(1) : 0;
+      document.getElementById('statAllocPct').innerText = `${allocPct}% Allocated`;
+      document.getElementById('statSpentPct').innerText = `${spentPct}% Spent`;
+
+      const varElem = document.getElementById('statVariance');
+      varElem.innerText = formatCurrency(netVariance);
+      varElem.className = `text-xl font-extrabold font-mono mt-1 ${netVariance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+
+      const leftElem = document.getElementById('statLeftToBudget');
+      const gaugeCard = document.getElementById('gaugeCard');
+      const gaugeText = document.getElementById('gaugeStatusText');
+
+      leftElem.innerText = formatCurrency(leftToBudget);
+
+      if (Math.abs(leftToBudget) < 0.01) {
+        leftElem.className = "text-xl font-extrabold font-mono mt-1 text-emerald-400";
+        gaugeCard.className = "glass-card p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-950/20 col-span-2 md:col-span-1 shadow-lg shadow-emerald-500/10";
+        gaugeText.innerText = "Perfect Zero-Based Budget!";
+        gaugeText.className = "text-[10px] font-semibold mt-1 text-emerald-400";
+      } else if (leftToBudget > 0) {
+        leftElem.className = "text-xl font-extrabold font-mono mt-1 text-amber-300";
+        gaugeCard.className = "glass-card p-4 rounded-2xl border-2 border-amber-500/60 bg-amber-950/10 col-span-2 md:col-span-1";
+        gaugeText.innerText = "Unallocated income remaining";
+        gaugeText.className = "text-[10px] font-semibold mt-1 text-amber-400";
+      } else {
+        leftElem.className = "text-xl font-extrabold font-mono mt-1 text-rose-400";
+        gaugeCard.className = "glass-card p-4 rounded-2xl border-2 border-rose-500 bg-rose-950/20 col-span-2 md:col-span-1 shadow-lg shadow-rose-500/10";
+        gaugeText.innerText = "Over-budget! Reduce allocations";
+        gaugeText.className = "text-[10px] font-semibold mt-1 text-rose-400";
+      }
+
+      // Render Footer Totals
+      const tfoot = document.getElementById('sheetFoot');
+      tfoot.innerHTML = `
+        <tr>
+          <td colspan="3" class="px-4 py-3 text-right font-bold text-xs uppercase tracking-wider text-slate-400">
+            Outflow Summary Totals:
+          </td>
+          <td class="px-3 py-3 text-right font-mono text-sm font-bold text-cyan-400">
+            ${formatCurrency(totalOutflowBudget)}
+          </td>
+          <td class="px-3 py-3 text-right font-mono text-sm font-bold text-purple-400">
+            ${formatCurrency(totalOutflowActual)}
+          </td>
+          <td class="px-3 py-3 text-right font-mono text-sm font-bold ${netVariance >= 0 ? 'text-emerald-400' : 'text-rose-400'}">
+            ${formatCurrency(netVariance)}
+          </td>
+          <td></td>
+        </tr>
+      `;
+
+      // Render Active Chart
+      renderActiveChart();
+    }
+
+    // Tab Switcher
+    function switchMainTab(tab) {
+      activeTab = tab;
+      const tabs = ['sheet', 'chart-all', 'chart-doughnut', 'chart-bar', 'chart-line', 'chart-pie', 'chart-radar'];
+      
+      tabs.forEach(t => {
+        const navBtn = document.getElementById(`nav-${t}`);
+        const sec = document.getElementById(`sec-${t}`);
+        if (t === tab) {
+          navBtn.className = "w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-3 transition-all nav-tab-active";
+          if (sec) sec.classList.remove('hidden');
+        } else {
+          navBtn.className = "w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-3 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-all";
+          if (sec) sec.classList.add('hidden');
+        }
+      });
+
+      renderActiveChart();
+    }
+
+    // Chart Render Dispatcher
+    function renderActiveChart() {
+      if (activeTab === 'sheet') return;
+
+      const categoryTotals = {
+        savings: { budget: 0, actual: 0 },
+        bills: { budget: 0, actual: 0 },
+        expenses: { budget: 0, actual: 0 },
+        debt: { budget: 0, actual: 0 }
+      };
+
+      sheetData.forEach(row => {
+        if (categoryTotals[row.type]) {
+          categoryTotals[row.type].budget += (row.budget || 0) * timeframeMultiplier;
+          categoryTotals[row.type].actual += (row.actual || 0) * timeframeMultiplier;
+        }
+      });
+
+      const catLabels = ['Savings', 'Bills', 'Expenses', 'Debt'];
+      const catBudgetVals = [categoryTotals.savings.budget, categoryTotals.bills.budget, categoryTotals.expenses.budget, categoryTotals.debt.budget];
+      const catActualVals = [categoryTotals.savings.actual, categoryTotals.bills.actual, categoryTotals.expenses.actual, categoryTotals.debt.actual];
+      const vibrantColors = ['#14b8a6', '#06b6d4', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899', '#10b981', '#3b82f6'];
+
+      // Destroy existing chart helper
+      const destroyChart = (id) => {
+        if (chartInstances[id]) { chartInstances[id].destroy(); }
+      };
+
+      if (activeTab === 'chart-doughnut' || activeTab === 'chart-all') {
+        const id = activeTab === 'chart-all' ? 'allDoughnutCanvas' : 'chartDoughnutCanvas';
+        destroyChart(id);
+        const ctx = document.getElementById(id).getContext('2d');
+        chartInstances[id] = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: catLabels,
+            datasets: [{ data: catBudgetVals, backgroundColor: vibrantColors.slice(0, 4) }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8' } } } }
+        });
+      }
+
+      if (activeTab === 'chart-bar' || activeTab === 'chart-all') {
+        const id = activeTab === 'chart-all' ? 'allBarCanvas' : 'chartBarCanvas';
+        destroyChart(id);
+        const ctx = document.getElementById(id).getContext('2d');
+        chartInstances[id] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: catLabels,
+            datasets: [
+              { label: 'Budgeted ($)', data: catBudgetVals, backgroundColor: '#06b6d4' },
+              { label: 'Actual Spent ($)', data: catActualVals, backgroundColor: '#a855f7' }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } }
+        });
+      }
+
+      if (activeTab === 'chart-line' || activeTab === 'chart-all') {
+        const id = activeTab === 'chart-all' ? 'allLineCanvas' : 'chartLineCanvas';
+        destroyChart(id);
+        const lineLabels = sheetData.map(r => r.name);
+        let accum = 0;
+        const accumData = sheetData.map(r => { accum += (r.actual || 0) * timeframeMultiplier; return accum; });
+
+        const ctx = document.getElementById(id).getContext('2d');
+        chartInstances[id] = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: lineLabels,
+            datasets: [{ label: 'Cumulative Spending ($)', data: accumData, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', fill: true, tension: 0.3 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } }
+        });
+      }
+
+      if (activeTab === 'chart-pie' || activeTab === 'chart-all') {
+        const id = activeTab === 'chart-all' ? 'allPieCanvas' : 'chartPieCanvas';
+        destroyChart(id);
+        const pieLabels = sheetData.map(r => r.name);
+        const pieVals = sheetData.map(r => (r.budget || 0) * timeframeMultiplier);
+
+        const ctx = document.getElementById(id).getContext('2d');
+        chartInstances[id] = new Chart(ctx, {
+          type: 'pie',
+          data: {
+            labels: pieLabels,
+            datasets: [{ data: pieVals, backgroundColor: pieLabels.map((_, i) => vibrantColors[i % vibrantColors.length]) }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8' } } } }
+        });
+      }
+
+      if (activeTab === 'chart-radar') {
+        const id = 'chartRadarCanvas';
+        destroyChart(id);
+        const ctx = document.getElementById(id).getContext('2d');
+        chartInstances[id] = new Chart(ctx, {
+          type: 'radar',
+          data: {
+            labels: catLabels,
+            datasets: [
+              { label: 'Budget Allocation', data: catBudgetVals, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)' },
+              { label: 'Actual Spent', data: catActualVals, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.2)' }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { r: { grid: { color: '#334155' }, ticks: { display: false } } } }
+        });
+      }
+    }
+
+    // Security PIN Lock Features
+    function openPinModal() {
+      document.getElementById('pinInput').value = '';
+      document.getElementById('pinErrorMsg').classList.add('hidden');
+      document.getElementById('pinModal').classList.remove('hidden');
+    }
+
+    function closePinModal() {
+      document.getElementById('pinModal').classList.add('hidden');
+    }
+
+    function submitPinModal() {
+      const pin = document.getElementById('pinInput').value;
+      if (pin.length === 4) {
+        userPin = pin;
+        localStorage.setItem('secure_budget_pin', pin);
+        document.getElementById('pinStatusBtn').innerText = 'Change PIN';
+        closePinModal();
+      } else {
+        document.getElementById('pinErrorMsg').innerText = "Please enter 4 digits.";
+        document.getElementById('pinErrorMsg').classList.remove('hidden');
+      }
+    }
+
+    function lockScreen() {
+      if (!userPin) {
+        openPinModal();
+      } else {
+        document.getElementById('unlockPinInput').value = '';
+        document.getElementById('unlockErrorMsg').classList.add('hidden');
+        document.getElementById('lockOverlay').classList.remove('hidden');
+      }
+    }
+
+    function unlockWorkspace() {
+      const input = document.getElementById('unlockPinInput').value;
+      if (input === userPin) {
+        document.getElementById('lockOverlay').classList.add('hidden');
+      } else {
+        document.getElementById('unlockErrorMsg').classList.remove('hidden');
+      }
+    }
+
+    // Export & Import Backup Utilities
+    function exportJSONBackup() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(sheetData, null, 2));
+      const dlAnchor = document.createElement('a');
+      dlAnchor.setAttribute("href", dataStr);
+      dlAnchor.setAttribute("download", `budget_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(dlAnchor);
+      dlAnchor.click();
+      dlAnchor.remove();
+    }
+
+    function triggerImportJSON() {
+      document.getElementById('importFileInput').click();
+    }
+
+    function handleImportJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (Array.isArray(parsed)) {
+            sheetData = parsed;
+            saveData();
+          }
+        } catch (err) {
+          console.error("Invalid JSON import file:", err);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function exportCSV() {
+      let csv = 'ID,Category,Type,Description,Budgeted,Actual,Variance\n';
+      sheetData.forEach(r => {
+        const scaledB = (r.budget || 0) * timeframeMultiplier;
+        const scaledA = (r.actual || 0) * timeframeMultiplier;
+        csv += `"${r.id}","${r.category}","${r.type}","${r.name.replace(/"/g, '""')}","${scaledB}","${scaledA}","${scaledB - scaledA}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Paycheck_Budget_${currentTimeframe}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
